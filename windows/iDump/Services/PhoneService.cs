@@ -77,25 +77,27 @@ public sealed class PhoneService : IDisposable
     }
 
     /// <summary>
-    /// Lists every file in the phone's DCIM folder. Returns null when the phone
-    /// is locked or hasn't trusted this PC yet (it then exposes no storage).
+    /// Lists every file in the phone's photo folders. Older iOS puts them under
+    /// Internal Storage\DCIM\100APPLE; newer iOS lists month folders like
+    /// Internal Storage\202510_a directly. Returns null when the phone is locked
+    /// or hasn't trusted this PC yet (it then exposes no folders).
     /// </summary>
     public Task<List<DeviceFile>?> ListFilesAsync(IProgress<int> progress) => RunAsync(device =>
     {
         if (device == null) return null;
 
         var root = device.GetRootDirectory();
-        MediaDirectoryInfo? dcim = null;
+        var folders = new List<MediaDirectoryInfo>();
         foreach (var storage in root.EnumerateDirectories())
         {
-            dcim = storage.EnumerateDirectories()
-                .FirstOrDefault(d => d.Name.Equals("DCIM", StringComparison.OrdinalIgnoreCase));
-            if (dcim != null) break;
+            var children = storage.EnumerateDirectories().ToList();
+            var dcim = children.FirstOrDefault(d => d.Name.Equals("DCIM", StringComparison.OrdinalIgnoreCase));
+            folders.AddRange(dcim != null ? dcim.EnumerateDirectories() : children);
         }
-        if (dcim == null) return null;
+        if (folders.Count == 0) return null;
 
         var files = new List<DeviceFile>();
-        foreach (var folder in dcim.EnumerateDirectories())
+        foreach (var folder in folders)
         {
             foreach (var file in folder.EnumerateFiles())
             {
